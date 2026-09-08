@@ -1,135 +1,26 @@
 package com.sulav.fflikesender
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
+import android.content.*
 import android.os.Bundle
-import android.os.Environment
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sulav.fflikesender.databinding.ActivityMainBinding
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URLEncoder
-import java.net.URL
+import org.json.JSONObject
+import java.net.*
 import java.nio.charset.StandardCharsets
 import kotlin.concurrent.thread
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityMainBinding
-    private var lastUrl = ""
-    private var lastResponse = ""
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        binding.sendButton.setOnClickListener { sendLike() }
-        binding.copyUrlButton.setOnClickListener { copyText("Request URL", lastUrl) }
-        binding.copyResponseButton.setOnClickListener { copyText("API Response", lastResponse) }
-        binding.saveButton.setOnClickListener { saveResponse() }
-    }
-
-    private fun sendLike() {
-        val uid = binding.uidInput.text?.toString()?.trim().orEmpty()
-        val region = binding.regionInput.text?.toString()?.trim().orEmpty()
-
-        if (uid.isEmpty()) {
-            binding.uidLayout.error = "Enter a UID"
-            return
-        }
-        binding.uidLayout.error = null
-
-        if (region.isEmpty()) {
-            binding.regionLayout.error = "Enter a region"
-            return
-        }
-        binding.regionLayout.error = null
-
-        val encodedUid = URLEncoder.encode(uid, StandardCharsets.UTF_8.toString())
-        val encodedRegion = URLEncoder.encode(region, StandardCharsets.UTF_8.toString())
-        lastUrl = "https://like.sulavcodex.com/like?uid=$encodedUid&server_name=$encodedRegion&key=SulavOp"
-
-        setLoading(true)
-        binding.urlText.text = lastUrl
-        binding.statusText.text = "Sending request…"
-
-        thread {
-            var connection: HttpURLConnection? = null
-            try {
-                connection = URL(lastUrl).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 20000
-                connection.setRequestProperty("Accept", "application/json, text/plain, */*")
-                connection.setRequestProperty("User-Agent", "FFLikeSender/1.0")
-                val code = connection.responseCode
-                val stream = if (code in 200..399) connection.inputStream else connection.errorStream
-                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                lastResponse = "HTTP $code\n$body"
-
-                runOnUiThread {
-                    binding.responseText.text = lastResponse
-                    binding.statusText.text = if (code in 200..299) "Request successful" else "Request returned HTTP $code"
-                    setLoading(false)
-                }
-            } catch (e: Exception) {
-                lastResponse = "ERROR\n${e.message ?: "Unknown network error"}"
-                runOnUiThread {
-                    binding.responseText.text = lastResponse
-                    binding.statusText.text = "Request failed"
-                    setLoading(false)
-                }
-            } finally {
-                connection?.disconnect()
-            }
-        }
-    }
-
-    private fun setLoading(loading: Boolean) {
-        binding.progress.visibility = if (loading) android.view.View.VISIBLE else android.view.View.GONE
-        binding.sendButton.isEnabled = !loading
-        binding.sendButton.text = if (loading) "SENDING…" else "SEND LIKE"
-    }
-
-    private fun copyText(label: String, value: String) {
-        if (value.isEmpty()) {
-            Toast.makeText(this, "Nothing to copy yet", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(this, "$label copied", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun saveResponse() {
-        if (lastResponse.isEmpty()) {
-            Toast.makeText(this, "Send a request first", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-        if (dir == null) {
-            Toast.makeText(this, "Storage unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val file = File(dir, "ff_like_response_${System.currentTimeMillis()}.txt")
-        try {
-            file.writeText(
-                "FF Like Sender\nOwner: @zestyji\n\nRequest URL:\n$lastUrl\n\nResponse:\n$lastResponse",
-                Charsets.UTF_8
-            )
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Saved successfully")
-                .setMessage(file.absolutePath)
-                .setPositiveButton("OK", null)
-                .show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Could not save file: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
+class MainActivity: AppCompatActivity() {
+ private lateinit var b: ActivityMainBinding
+ private var raw=""
+ private val api="aHR0cHM6Ly9zdWxhdmxpa2VzZW5kZXIyLnZlcmNlbC5hcHAvbGlrZT91aWQ9e30mc2VydmVyX25hbWU9e30ma2V5PUpNTEI="
+ private fun endpoint()=String(android.util.Base64.decode(api, android.util.Base64.DEFAULT), StandardCharsets.UTF_8)
+ override fun onCreate(s:Bundle?){super.onCreate(s);b=ActivityMainBinding.inflate(layoutInflater);setContentView(b.root);b.sendButton.setOnClickListener{send()};b.copyResponseButton.setOnClickListener{copy()};b.clearButton.setOnClickListener{clear()}}
+ private fun send(){val uid=b.uidInput.text?.toString()?.trim().orEmpty();val region=b.regionInput.text?.toString()?.trim().orEmpty();b.uidLayout.error=null;b.regionLayout.error=null;if(uid.isEmpty()){b.uidLayout.error="Enter UID";return};if(region.isEmpty()){b.regionLayout.error="Enter region";return};val u=endpoint().replaceFirst("{}",URLEncoder.encode(uid,"UTF-8")).replaceFirst("{}",URLEncoder.encode(region,"UTF-8"));loading(true);thread{try{val c=URL(u).openConnection() as HttpURLConnection;c.requestMethod="GET";c.connectTimeout=15000;c.readTimeout=20000;val code=c.responseCode;val body=(if(code<400)c.inputStream else c.errorStream).bufferedReader().use{it.readText()};raw="HTTP $code\n$body";runOnUiThread{b.responseText.text=raw;if(code in 200..299)show(body)else fail("Request failed")};c.disconnect()}catch(e:Exception){raw="ERROR\n${e.message?:"Network error"}";runOnUiThread{b.responseText.text=raw;fail("Connection error")}}}}
+ private fun show(body:String){try{val j=JSONObject(body);b.nameValue.text=j.optString("PlayerNickname","Unknown");b.beforeValue.text="Before likes: ${j.optInt("LikesbeforeCommand",0)}";b.afterValue.text="After likes: ${j.optInt("LikesafterCommand",0)}";b.givenValue.text="Like given: ${j.optInt("LikesGivenByAPI",0)}";b.remainsValue.text="Remains: ${j.optString("remains","N/A")}";b.apiStatusValue.text="Status: ${if(j.optInt("status",0)==1)"SUCCESS" else "FAILED"}";b.resultCard.visibility=View.VISIBLE;b.statusText.text="LIKE SENT SUCCESSFULLY";b.statusText.setTextColor(getColor(android.R.color.holo_green_dark))}catch(_:Exception){fail("Invalid API response")};loading(false)}
+ private fun fail(t:String){b.statusText.text=t;b.statusText.setTextColor(getColor(android.R.color.holo_red_dark));b.resultCard.visibility=View.VISIBLE;loading(false)}
+ private fun loading(x:Boolean){b.progress.visibility=if(x)View.VISIBLE else View.GONE;b.sendButton.isEnabled=!x;b.sendButton.text=if(x)"SENDING…" else "SEND LIKE"}
+ private fun copy(){if(raw.isEmpty()){Toast.makeText(this,"No response",Toast.LENGTH_SHORT).show();return};(getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("API Response",raw));Toast.makeText(this,"Copied",Toast.LENGTH_SHORT).show()}
+ private fun clear(){b.uidInput.text?.clear();b.responseText.text="No response yet";b.resultCard.visibility=View.GONE;b.statusText.text="Ready";raw=""}
 }
